@@ -74,7 +74,8 @@ class Function:
         return function
 
     def print_samples(self, depth):
-        print "%s%s - %s" % (' ' * (self.indent * depth), self.get_samples(), self.name)
+#        print("aaaa")
+        print("%s%s - %s" % (' ' * (self.indent * depth), self.get_samples(), self.name))
         for function in self.subfunctions:
             function.print_samples(depth+1)
 
@@ -82,17 +83,25 @@ class Function:
 #        print "%s%0.2f - %s" % (' ' * (self.indent * depth), self.get_percent(total), self.name)
         subfunctions = {}
         for function in self.subfunctions:
-            subfunctions[function.name] = function.get_percent(total)
+            v = function.get_percent(total)
+            if function.name is None:
+              print(">>>> name = None")
+              function.name = "???"
+            if v is None:
+              print(">>>>%s" % (function.name))
+              v = "???"
+            subfunctions[function.name] = v
         
         i = 0
-        for name, value in sorted(subfunctions.iteritems(), key=lambda (k,v): (v,k), reverse=True):
+        #for name, value in sorted(subfunctions.iteritems(), key=lambda (k,v): (v,k), reverse=True):
+        for name, value in sorted(subfunctions.items(), key= lambda kv: (kv[1], kv[0]), reverse=True):
             new_prefix = '' 
             if i + 1 == len(self.subfunctions):
                new_prefix += '  '
             else:
                new_prefix += '| '
 
-            print "%s%s%0.2f%% %s" % (prefix, "+ ", value, name)
+            print ("%s%s%0.2f%% %s" % (prefix, "+ ", value, name))
 
             # Don't descend for very small values
             if value < 0.1:
@@ -157,7 +166,7 @@ The default PERIOD is 0.5 seconds.
         sleeps = 0
 
         threads = {}
-        for i in xrange(0,2000):
+        for i in range(0,2000):
           gdb.events.cont.connect(breaking_continue_handler)
           gdb.execute("continue", to_string=True)
           gdb.events.cont.disconnect(breaking_continue_handler)
@@ -181,11 +190,11 @@ The default PERIOD is 0.5 seconds.
           gdb.write(".")
           gdb.flush(gdb.STDOUT)
 
-        print "";
-        for thn, function in sorted(threads.iteritems()):
-          print ""
-          print "Thread: %s" % thn
-          print ""
+        print("");
+        for thn, function in sorted(threads.items()):
+          print("")
+          print("Thread: %s" % thn)
+          print("")
           function.print_percent("", function.get_samples())
 #        top.print_percent("", top.get_samples())
 
