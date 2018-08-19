@@ -29,28 +29,28 @@ SAMPLE_DURATION = 180
 
 
 def get_call_chain():
-    function_names = []
+    func_names = []
     frame = gdb.newest_frame()
     while frame is not None:
-        function_names.append(frame.name())
+        func_names.append(frame.name())
         frame = frame.older()
 
-    return tuple(function_names)
+    return tuple(func_names)
 
 
 class GDBThread:
-    def __init__(self, name, num, ptid, function):
+    def __init__(self, name, num, ptid, func):
         self.name = name
         self.num = num
         self.ptid = ptid
-        self.function = function
+        self.func = func
 
 
 class GDBFunction:
     def __init__(self, name, indent):
         self.name = name
         self.indent = indent
-        self.subfunctions = []
+        self.subfuncs = []
 
         # count of times we terminated here
         self.count = 0
@@ -60,8 +60,8 @@ class GDBFunction:
 
     def get_samples(self):
         _count = self.count
-        for function in self.subfunctions:
-            _count += function.get_samples()
+        for func in self.subfuncs:
+            _count += func.get_samples()
         return _count
 
     def get_percent(self, total):
@@ -71,45 +71,46 @@ class GDBFunction:
         return self.name
 
     def get_func(self, name):
-        for function in self.subfunctions:
-          if function.get_name() == name:
-            return function
+        for func in self.subfuncs:
+            if func.get_name() == name:
+                return func
         return None
 
     def get_or_add_func(self, name):
-        function = self.get_func(name)
-        if function is not None:
-            return function
-        function = GDBFunction(name, self.indent)
-        self.subfunctions.append(function)
-        return function
+        func = self.get_func(name)
+        if func is not None:
+            return func
+
+        func = GDBFunction(name, self.indent)
+        self.subfuncs.append(func)
+        return func
 
     def print_samples(self, depth):
         print("%s%s - %s" % (' ' * (self.indent * depth), self.get_samples(), self.name))
-        for function in self.subfunctions:
-            function.print_samples(depth+1)
+        for func in self.subfuncs:
+            func.print_samples(depth + 1)
 
     def print_percent(self, prefix, total):
-        subfunctions = {}
-        for function in self.subfunctions:
-            v = function.get_percent(total)
-            if function.name is None:
+        subfuncs = {}
+        for func in self.subfuncs:
+            v = func.get_percent(total)
+            if func.name is None:
                 print(">>>> name = None")
-                function.name = "???"
+                func.name = "???"
             if v is None:
-                print(">>>>%s" % (function.name))
+                print(">>>> %s" % func.name)
                 v = "???"
-            subfunctions[function.name] = v
+            subfuncs[func.name] = v
         
         i = 0
-        for name, value in sorted(subfunctions.items(), key= lambda kv: (kv[1], kv[0]), reverse=True):
+        for name, value in sorted(subfuncs.items(), key= lambda kv: (kv[1], kv[0]), reverse=True):
             new_prefix = '' 
-            if i + 1 == len(self.subfunctions):
+            if i + 1 == len(self.subfuncs):
                 new_prefix += '  '
             else:
                 new_prefix += '| '
 
-            print ("%s%s%0.2f%% %s" % (prefix, "+ ", value, name))
+            print("%s%s%0.2f%% %s" % (prefix, "+ ", value, name))
 
             # Don't descend for very small values
             if value < 0.1:
@@ -122,15 +123,15 @@ class GDBFunction:
         if frame is None:
             self.count += 1
         else:
-            function = self.get_or_add_func(frame.name())
-            function.add_frame(frame.older())
+            func = self.get_or_add_func(frame.name())
+            func.add_frame(frame.older())
 
     def inverse_add_frame(self, frame):
         if frame is None:
             self.count += 1
         else:
-            function = self.get_or_add_func(frame.name())
-            function.inverse_add_frame(frame.newer())
+            func = self.get_or_add_func(frame.name())
+            func.inverse_add_frame(frame.newer())
 
 
 class ProfileCommand(gdb.Command):
@@ -189,8 +190,6 @@ DURATION is the sampling duration, the default duration is %ds.
             sleep(self._period)
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
 
-        sleeps = 0
-
         threads = {}
         for i in range(0, self._samples):
             gdb.events.cont.connect(breaking_continue_handler)
@@ -207,18 +206,17 @@ DURATION is the sampling duration, the default duration is %ds.
                     if thn not in threads:
                         f = GDBFunction(None, 2)
                         threads[thn] = GDBThread(th.name, thn, th.ptid, f)
-                    threads[thn].function.inverse_add_frame(frame)
+                    threads[thn].func.inverse_add_frame(frame)
 
-            sleeps += 1
             gdb.write(".")
             gdb.flush(gdb.STDOUT)
 
         print("")
         for thn, gdbth in sorted(threads.items()):
             print("")
-            print("Thread: %s (%s) - %s samples " % (gdbth.num, gdbth.name, gdbth.function.get_samples()))
+            print("Thread: %s (%s) - %s samples " % (gdbth.num, gdbth.name, gdbth.func.get_samples()))
             print("")
-            gdbth.function.print_percent("", gdbth.function.get_samples())
+            gdbth.func.print_percent("", gdbth.func.get_samples())
 
         pid = gdb.selected_inferior().pid
         os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until it's reattached
