@@ -39,17 +39,15 @@ def get_call_chain():
 
 
 class GDBThread:
-    def __init__(self, name, num, ptid, func):
-        self.name = name
+    def __init__(self, num, name, func):
         self.num = num
-        self.ptid = ptid
+        self.name = name
         self.func = func
 
 
 class GDBFunction:
-    def __init__(self, name, indent):
+    def __init__(self, name):
         self.name = name
-        self.indent = indent
         self.subfuncs = []
 
         # count of times we terminated here
@@ -59,10 +57,10 @@ class GDBFunction:
         self.count += 1
 
     def get_samples(self):
-        _count = self.count
+        count = self.count
         for func in self.subfuncs:
-            _count += func.get_samples()
-        return _count
+            count += func.get_samples()
+        return count
 
     def get_percent(self, total):
         return 100.0 * self.get_samples() / total
@@ -81,39 +79,32 @@ class GDBFunction:
         if func is not None:
             return func
 
-        func = GDBFunction(name, self.indent)
+        func = GDBFunction(name)
         self.subfuncs.append(func)
         return func
-
-    def print_samples(self, depth):
-        print("%s%s - %s" % (' ' * (self.indent * depth), self.get_samples(), self.name))
-        for func in self.subfuncs:
-            func.print_samples(depth + 1)
 
     def print_percent(self, prefix, total):
         subfuncs = {}
         for func in self.subfuncs:
-            v = func.get_percent(total)
             if func.name is None:
-                print(">>>> name = None")
                 func.name = "???"
-            if v is None:
-                print(">>>> %s" % func.name)
-                v = "???"
-            subfuncs[func.name] = v
+
+            percent = func.get_percent(total)
+
+            subfuncs[func.name] = percent
         
         i = 0
-        for name, value in sorted(subfuncs.items(), key= lambda kv: (kv[1], kv[0]), reverse=True):
+        for name, percent in sorted(subfuncs.items(), key=lambda kv: (kv[1], kv[0]), reverse=True):
             new_prefix = '' 
             if i + 1 == len(self.subfuncs):
                 new_prefix += '  '
             else:
                 new_prefix += '| '
 
-            print("%s%s%0.2f%% %s" % (prefix, "+ ", value, name))
+            print("%s%s%0.2f%% %s" % (prefix, "+ ", percent, name))
 
             # Don't descend for very small values
-            if value < 0.1:
+            if percent < 0.1:
                 continue
 
             self.get_func(name).print_percent(prefix + new_prefix, total)
@@ -124,14 +115,7 @@ class GDBFunction:
             self.count += 1
         else:
             func = self.get_or_add_func(frame.name())
-            func.add_frame(frame.older())
-
-    def inverse_add_frame(self, frame):
-        if frame is None:
-            self.count += 1
-        else:
-            func = self.get_or_add_func(frame.name())
-            func.inverse_add_frame(frame.newer())
+            func.add_frame(frame.newer())
 
 
 class ProfileCommand(gdb.Command):
@@ -184,7 +168,7 @@ DURATION is the sampling duration, the default duration is %ds.
                 print("Sample duration must be an integer. Try \"help profile\".")
                 return
 
-        gdb.execute("set pagination off")
+        gdb.execute("set pagination off", to_string=True)
 
         def breaking_continue_handler(event):
             sleep(self._period)
@@ -199,24 +183,26 @@ DURATION is the sampling duration, the default duration is %ds.
             for inf in gdb.inferiors():
                 for th in inf.threads():
                     th.switch()
-                    thn = th.num
+
+                    if th.num not in threads:
+                        func = GDBFunction(None)
+                        threads[th.num] = GDBThread(th.num, th.name, func)
+
                     frame = gdb.newest_frame()
                     while frame.older() is not None:
                         frame = frame.older()
-                    if thn not in threads:
-                        f = GDBFunction(None, 2)
-                        threads[thn] = GDBThread(th.name, thn, th.ptid, f)
-                    threads[thn].func.inverse_add_frame(frame)
+
+                    threads[th.num].func.add_frame(frame)
 
             gdb.write(".")
             gdb.flush(gdb.STDOUT)
 
         print("")
-        for thn, gdbth in sorted(threads.items()):
+        for _, thread in sorted(threads.items()):
             print("")
-            print("Thread: %s (%s) - %s samples " % (gdbth.num, gdbth.name, gdbth.func.get_samples()))
+            print("Thread: %d (%s) - %d samples " % (thread.num, thread.name, thread.func.get_samples()))
             print("")
-            gdbth.func.print_percent("", gdbth.func.get_samples())
+            thread.func.print_percent("", thread.func.get_samples())
 
         pid = gdb.selected_inferior().pid
         os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until it's reattached
