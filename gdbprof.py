@@ -28,16 +28,6 @@ SAMPLE_FREQUENCY = 10
 SAMPLE_DURATION = 180
 
 
-def get_call_chain():
-    func_names = []
-    frame = gdb.newest_frame()
-    while frame is not None:
-        func_names.append(frame.name())
-        frame = frame.older()
-
-    return tuple(func_names)
-
-
 class GDBThread:
     def __init__(self, num, name, func):
         self.num = num
@@ -46,12 +36,14 @@ class GDBThread:
 
 
 class GDBFunction:
-    def __init__(self, name):
+    def __init__(self, pc, name):
+        self.pc = pc
         self.name = name
         self.subfuncs = []
 
         # count of times we terminated here
         self.count = 0
+        self.percent = 0.0
 
     def add_count(self):
         self.count += 1
@@ -65,57 +57,55 @@ class GDBFunction:
     def get_percent(self, total):
         return 100.0 * self.get_samples() / total
 
-    def get_name(self):
-        return self.name
-
-    def get_func(self, name):
+    def get_func(self, pc):
         for func in self.subfuncs:
-            if func.get_name() == name:
+            if func.pc == pc:
                 return func
         return None
 
-    def get_or_add_func(self, name):
-        func = self.get_func(name)
+    def get_or_add_func(self, pc, name):
+        func = self.get_func(pc)
         if func is not None:
             return func
 
-        func = GDBFunction(name)
+        if name is None:
+            name = "???"
+
+        func = GDBFunction(pc, name)
         self.subfuncs.append(func)
         return func
 
-    def print_percent(self, prefix, total):
-        subfuncs = {}
+    def add_frame(self, frame):
+        if frame is None:
+            self.count += 1
+        else:
+            func = self.get_or_add_func(frame.pc(), frame.name())
+            func.add_frame(frame.newer())
+
+    def calc_percent(self, total):
+        self.percent = self.get_percent(total)
         for func in self.subfuncs:
-            if func.name is None:
-                func.name = "???"
+            func.calc_percent(total)
 
-            percent = func.get_percent(total)
-
-            subfuncs[func.name] = percent
+    def print_percent(self, prefix, total):
+        self.calc_percent(total)
         
         i = 0
-        for name, percent in sorted(subfuncs.items(), key=lambda kv: (kv[1], kv[0]), reverse=True):
+        for func in sorted(self.subfuncs, key=lambda f: (f.percent, f.name), reverse=True):
             new_prefix = '' 
             if i + 1 == len(self.subfuncs):
                 new_prefix += '  '
             else:
                 new_prefix += '| '
 
-            print("%s%s%0.2f%% %s" % (prefix, "+ ", percent, name))
+            print("%s%s%0.2f%% %s" % (prefix, "+ ", func.percent, func.name))
 
             # Don't descend for very small values
-            if percent < 0.1:
+            if func.percent < 0.1:
                 continue
 
-            self.get_func(name).print_percent(prefix + new_prefix, total)
+            func.print_percent(prefix + new_prefix, total)
             i += 1
-
-    def add_frame(self, frame):
-        if frame is None:
-            self.count += 1
-        else:
-            func = self.get_or_add_func(frame.name())
-            func.add_frame(frame.newer())
 
 
 class ProfileCommand(gdb.Command):
@@ -185,7 +175,7 @@ DURATION is the sampling duration, the default duration is %ds.
                     th.switch()
 
                     if th.num not in threads:
-                        func = GDBFunction(None)
+                        func = GDBFunction(None, None)
                         threads[th.num] = GDBThread(th.num, th.name, func)
 
                     frame = gdb.newest_frame()
