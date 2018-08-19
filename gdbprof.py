@@ -20,7 +20,6 @@
 # SOFTWARE.
 
 import gdb
-# from collections import defaultdict
 from time import sleep
 import os
 import signal
@@ -91,7 +90,6 @@ class GDBFunction:
             function.print_samples(depth+1)
 
     def print_percent(self, prefix, total):
-#        print "%s%0.2f - %s" % (' ' * (self.indent * depth), self.get_percent(total), self.name)
         subfunctions = {}
         for function in self.subfunctions:
             v = function.get_percent(total)
@@ -104,7 +102,6 @@ class GDBFunction:
             subfunctions[function.name] = v
         
         i = 0
-        #for name, value in sorted(subfunctions.iteritems(), key=lambda (k,v): (v,k), reverse=True):
         for name, value in sorted(subfunctions.items(), key= lambda kv: (kv[1], kv[0]), reverse=True):
             new_prefix = '' 
             if i + 1 == len(self.subfunctions):
@@ -189,8 +186,6 @@ DURATION is the sampling duration, the default duration is %ds.
             sleep(self._period)
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
 
-#        call_chain_frequencies = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
-#        top = GDBFunction("Top", 2)
         sleeps = 0
 
         threads = {}
@@ -200,16 +195,12 @@ DURATION is the sampling duration, the default duration is %ds.
             gdb.events.cont.disconnect(breaking_continue_handler)
 
             for inf in gdb.inferiors():
-                inum = inf.num
                 for th in inf.threads():
                     th.switch()
                     thn = th.num
-#                    call_chain_frequencies[inum][thn][get_call_chain()] += 1
                     frame = gdb.newest_frame()
                     while frame.older() is not None:
                         frame = frame.older()
-#                    top.inverse_add_frame(frame);
-#                    top.add_frame(gdb.newest_frame())
                     if thn not in threads:
                         f = GDBFunction(None, 2)
                         threads[thn] = GDBThread(th.name, thn, th.ptid, f)
@@ -225,28 +216,9 @@ DURATION is the sampling duration, the default duration is %ds.
             print("Thread: %s (%s) - %s samples " % (gdbth.num, gdbth.name, gdbth.function.get_samples()))
             print("")
             gdbth.function.print_percent("", gdbth.function.get_samples())
-            
-#        top.print_percent("", top.get_samples())
-
-#        print("\nProfiling complete with %d samples." % sleeps)
-#        for inum, i_chain_frequencies in sorted(call_chain_frequencies.iteritems()):
-#            print ""
-#            print "INFERIOR NUM: %s" % inum
-#            print ""
-#            for thn, t_chain_frequencies in sorted (i_chain_frequencies.iteritems()):
-#                print ""
-#                print "THREAD NUM: %s" % thn
-#                print ""
-#
-#                for call_chain, frequency in sorted(t_chain_frequencies.iteritems(), key=lambda x: x[1], reverse=True):
-#                    print("%d\t%s" % (frequency, '->'.join(str(i) for i in call_chain)))
-#
-#        for call_chain, frequency in sorted(call_chain_frequencies.iteritems(), key=lambda x: x[1], reverse=True):
-#            print("%d\t%s" % (frequency, '->'.join(str(i) for i in call_chain)))
 
         pid = gdb.selected_inferior().pid
-        os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until
-                                      # it's reattached.
+        os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until it's reattached
         gdb.execute("detach", to_string=True)
         gdb.execute("attach %d" % pid, to_string=True)
         os.kill(pid, signal.SIGCONT)
