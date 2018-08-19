@@ -150,6 +150,9 @@ DURATION is the sampling duration, the default duration is %ds.
         self._samples = self.frequency * self.duration
 
     def complete(self, text, word):
+        if word != "":
+            return gdb.COMPLETE_NONE
+
         if text == "":
             return [str(self.frequency)]
         elif len(text.split()) < 2:
