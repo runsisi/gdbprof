@@ -25,6 +25,9 @@ from time import sleep
 import os
 import signal
 
+SAMPLE_FREQUENCY = 10
+SAMPLE_DURATION = 180
+
 
 def get_call_chain():
     function_names = []
@@ -134,34 +137,35 @@ class GDBFunction:
 
 
 class ProfileCommand(gdb.Command):
-    """Wall clock time profiling leveraging gdb for better backtraces."""
-
-    def __init__(self):
-        super(ProfileCommand, self).__init__("profile", gdb.COMMAND_RUNNING,
-                                             gdb.COMPLETE_NONE, True)
-
-
-class ProfileBeginCommand(gdb.Command):
     """Profile an application against wall clock time.
-profile begin [PERIOD]
-PERIOD is the sampling interval in seconds.
-The default PERIOD is 0.5 seconds.
+
+profile FREQUENCY DURATION
+FREQUENCY is the sampling frequency, the default frequency is %dhz.
+DURATION is the sampling duration, the default duration is %ds.
     """
 
     def __init__(self):
-        super(ProfileBeginCommand, self).__init__("profile begin",
-                                                  gdb.COMMAND_RUNNING)
+        super(ProfileCommand, self).__init__("profile", gdb.COMMAND_RUNNING,
+                                             prefix=False)
+
+    def complete(self, text, word):
+        if text == "":
+            return [str(SAMPLE_FREQUENCY)]
+        elif len(text.split()) < 2:
+            return [str(SAMPLE_DURATION)]
+        return gdb.COMPLETE_NONE
 
     def invoke(self, argument, from_tty):
         self.dont_repeat()
 
-        period = 0.1
+        frequency = SAMPLE_FREQUENCY
+        period = 1.0 / frequency
 
         args = gdb.string_to_argv(argument)
 
         if len(args) > 0:
             try:
-                period = int(args[0])
+                period = 1.0 / int(args[0])
             except ValueError:
                 print("Invalid number \"%s\"." % args[0])
                 return
@@ -234,5 +238,5 @@ The default PERIOD is 0.5 seconds.
         gdb.execute("continue", to_string=True)
 
 
+ProfileCommand.__doc__ %= (SAMPLE_FREQUENCY, SAMPLE_DURATION)
 ProfileCommand()
-ProfileBeginCommand()
