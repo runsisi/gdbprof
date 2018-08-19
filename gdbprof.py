@@ -20,10 +20,11 @@
 # SOFTWARE.
 
 import gdb
-from collections import defaultdict
+# from collections import defaultdict
 from time import sleep
 import os
 import signal
+
 
 def get_call_chain():
     function_names = []
@@ -34,6 +35,7 @@ def get_call_chain():
 
     return tuple(function_names)
 
+
 class GDBThread:
     def __init__(self, name, num, ptid, function):
         self.name = name
@@ -41,8 +43,8 @@ class GDBThread:
         self.ptid = ptid
         self.function = function
 
-class GDBFunction:
 
+class GDBFunction:
     def __init__(self, name, indent):
         self.name = name
         self.indent = indent
@@ -64,7 +66,7 @@ class GDBFunction:
         return 100.0 * self.get_samples() / total
 
     def get_name(self):
-        return self.name;
+        return self.name
 
     def get_func(self, name):
         for function in self.subfunctions:
@@ -73,15 +75,14 @@ class GDBFunction:
         return None
 
     def get_or_add_func(self, name):
-        function = self.get_func(name);
+        function = self.get_func(name)
         if function is not None:
-            return function; 
+            return function
         function = GDBFunction(name, self.indent)
         self.subfunctions.append(function)
         return function
 
     def print_samples(self, depth):
-#        print("aaaa")
         print("%s%s - %s" % (' ' * (self.indent * depth), self.get_samples(), self.name))
         for function in self.subfunctions:
             function.print_samples(depth+1)
@@ -92,11 +93,11 @@ class GDBFunction:
         for function in self.subfunctions:
             v = function.get_percent(total)
             if function.name is None:
-              print(">>>> name = None")
-              function.name = "???"
+                print(">>>> name = None")
+                function.name = "???"
             if v is None:
-              print(">>>>%s" % (function.name))
-              v = "???"
+                print(">>>>%s" % (function.name))
+                v = "???"
             subfunctions[function.name] = v
         
         i = 0
@@ -104,15 +105,15 @@ class GDBFunction:
         for name, value in sorted(subfunctions.items(), key= lambda kv: (kv[1], kv[0]), reverse=True):
             new_prefix = '' 
             if i + 1 == len(self.subfunctions):
-               new_prefix += '  '
+                new_prefix += '  '
             else:
-               new_prefix += '| '
+                new_prefix += '| '
 
             print ("%s%s%0.2f%% %s" % (prefix, "+ ", value, name))
 
             # Don't descend for very small values
             if value < 0.1:
-                continue;
+                continue
 
             self.get_func(name).print_percent(prefix + new_prefix, total)
             i += 1
@@ -131,12 +132,14 @@ class GDBFunction:
             function = self.get_or_add_func(frame.name())
             function.inverse_add_frame(frame.newer())
 
+
 class ProfileCommand(gdb.Command):
     """Wall clock time profiling leveraging gdb for better backtraces."""
 
     def __init__(self):
         super(ProfileCommand, self).__init__("profile", gdb.COMMAND_RUNNING,
                                              gdb.COMPLETE_NONE, True)
+
 
 class ProfileBeginCommand(gdb.Command):
     """Profile an application against wall clock time.
@@ -158,7 +161,6 @@ The default PERIOD is 0.5 seconds.
 
         if len(args) > 0:
             try:
-
                 period = int(args[0])
             except ValueError:
                 print("Invalid number \"%s\"." % args[0])
@@ -173,37 +175,38 @@ The default PERIOD is 0.5 seconds.
         sleeps = 0
 
         threads = {}
-        for i in range(0,2000):
-          gdb.events.cont.connect(breaking_continue_handler)
-          gdb.execute("continue", to_string=True)
-          gdb.events.cont.disconnect(breaking_continue_handler)
+        for i in range(0, 10):
+            gdb.events.cont.connect(breaking_continue_handler)
+            gdb.execute("continue", to_string=True)
+            gdb.events.cont.disconnect(breaking_continue_handler)
 
-          for inf in gdb.inferiors():
-            inum = inf.num
-            for th in inf.threads():
-              th.switch()
-              thn = th.num
-#              call_chain_frequencies[inum][thn][get_call_chain()] += 1
-              frame = gdb.newest_frame()
-              while (frame.older() != None):
-                frame = frame.older()
-#              top.inverse_add_frame(frame);
-#              top.add_frame(gdb.newest_frame())
-              if thn not in threads:
-                f = GDBFunction(None, 2)
-                threads[thn] = GDBThread(th.name, thn, th.ptid, f)
-              threads[thn].function.inverse_add_frame(frame)
+            for inf in gdb.inferiors():
+                inum = inf.num
+                for th in inf.threads():
+                    th.switch()
+                    thn = th.num
+#                    call_chain_frequencies[inum][thn][get_call_chain()] += 1
+                    frame = gdb.newest_frame()
+                    while frame.older() is not None:
+                        frame = frame.older()
+#                    top.inverse_add_frame(frame);
+#                    top.add_frame(gdb.newest_frame())
+                    if thn not in threads:
+                        f = GDBFunction(None, 2)
+                        threads[thn] = GDBThread(th.name, thn, th.ptid, f)
+                    threads[thn].function.inverse_add_frame(frame)
 
-          sleeps += 1
-          gdb.write(".")
-          gdb.flush(gdb.STDOUT)
+            sleeps += 1
+            gdb.write(".")
+            gdb.flush(gdb.STDOUT)
 
-        print "";
-        for thn, gdbth in sorted(threads.iteritems()):
-          print ""
-          print "Thread: %s (%s) - %s samples " % (gdbth.num, gdbth.name, gdbth.function.get_samples())
-          print ""
-          gdbth.function.print_percent("", gdbth.function.get_samples())
+        print("")
+        for thn, gdbth in sorted(threads.items()):
+            print("")
+            print("Thread: %s (%s) - %s samples " % (gdbth.num, gdbth.name, gdbth.function.get_samples()))
+            print("")
+            gdbth.function.print_percent("", gdbth.function.get_samples())
+            
 #        top.print_percent("", top.get_samples())
 
 #        print("\nProfiling complete with %d samples." % sleeps)
@@ -222,7 +225,6 @@ The default PERIOD is 0.5 seconds.
 #        for call_chain, frequency in sorted(call_chain_frequencies.iteritems(), key=lambda x: x[1], reverse=True):
 #            print("%d\t%s" % (frequency, '->'.join(str(i) for i in call_chain)))
 
-
         pid = gdb.selected_inferior().pid
         os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until
                                       # it's reattached.
@@ -230,6 +232,7 @@ The default PERIOD is 0.5 seconds.
         gdb.execute("attach %d" % pid, to_string=True)
         os.kill(pid, signal.SIGCONT)
         gdb.execute("continue", to_string=True)
+
 
 ProfileCommand()
 ProfileBeginCommand()
