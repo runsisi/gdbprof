@@ -147,31 +147,44 @@ DURATION is the sampling duration, the default duration is %ds.
     def __init__(self):
         super(ProfileCommand, self).__init__("profile", gdb.COMMAND_RUNNING,
                                              prefix=False)
+        self.frequency = SAMPLE_FREQUENCY
+        self.duration = SAMPLE_DURATION
+        self._period = 1.0 / self.frequency
+        self._samples = self.frequency * self.duration
 
     def complete(self, text, word):
         if text == "":
-            return [str(SAMPLE_FREQUENCY)]
+            return [str(self.frequency)]
         elif len(text.split()) < 2:
-            return [str(SAMPLE_DURATION)]
+            return [str(self.duration)]
         return gdb.COMPLETE_NONE
 
     def invoke(self, argument, from_tty):
         self.dont_repeat()
 
-        frequency = SAMPLE_FREQUENCY
-        period = 1.0 / frequency
+        argv = gdb.string_to_argv(argument)
 
-        args = gdb.string_to_argv(argument)
+        if len(argv) > 2:
+            print("Extraneous argument. Try \"help profile\"")
+            return
 
-        if len(args) > 0:
+        if len(argv) > 0:
             try:
-                period = 1.0 / int(args[0])
+                self.frequency = int(argv[0])
+                self._period = 1.0 / self.frequency
             except ValueError:
-                print("Invalid number \"%s\"." % args[0])
+                print("Sample frequency must be an integer. Try \"help profile\".")
+                return
+        if len(argv) > 1:
+            try:
+                self.duration = int(argv[1])
+                self._samples = self.frequency * self.duration
+            except ValueError:
+                print("Sample duration must be an integer. Try \"help profile\".")
                 return
 
         def breaking_continue_handler(event):
-            sleep(period)
+            sleep(self._period)
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
 
 #        call_chain_frequencies = defaultdict(lambda: defaultdict(lambda: defaultdict(int)))
@@ -179,7 +192,7 @@ DURATION is the sampling duration, the default duration is %ds.
         sleeps = 0
 
         threads = {}
-        for i in range(0, 10):
+        for i in range(0, self._samples):
             gdb.events.cont.connect(breaking_continue_handler)
             gdb.execute("continue", to_string=True)
             gdb.events.cont.disconnect(breaking_continue_handler)
