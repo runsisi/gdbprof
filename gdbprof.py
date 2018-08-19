@@ -161,31 +161,35 @@ DURATION is the sampling duration, the default duration is %ds.
         gdb.execute("set pagination off", to_string=True)
 
         def breaking_continue_handler(event):
-            sleep(self._period)
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
 
         threads = {}
-        for i in range(0, self._samples):
-            gdb.events.cont.connect(breaking_continue_handler)
-            gdb.execute("continue", to_string=True)
-            gdb.events.cont.disconnect(breaking_continue_handler)
+        try:
+            for i in range(0, self._samples):
+                # gdb.events.cont.connect(breaking_continue_handler)
+                # gdb.execute("continue", to_string=True)
+                # gdb.events.cont.disconnect(breaking_continue_handler)
 
-            for inf in gdb.inferiors():
-                for th in inf.threads():
-                    th.switch()
+                for inf in gdb.inferiors():
+                    for th in inf.threads():
+                        th.switch()
 
-                    if th.num not in threads:
-                        func = GDBFunction(None, None)
-                        threads[th.num] = GDBThread(th.num, th.name, func)
+                        if th.num not in threads:
+                            func = GDBFunction(None, None)
+                            threads[th.num] = GDBThread(th.num, th.name, func)
 
-                    frame = gdb.newest_frame()
-                    while frame.older() is not None:
-                        frame = frame.older()
+                        frame = gdb.newest_frame()
+                        while frame.older() is not None:
+                            frame = frame.older()
 
-                    threads[th.num].func.add_frame(frame)
+                        threads[th.num].func.add_frame(frame)
 
-            gdb.write(".")
-            gdb.flush(gdb.STDOUT)
+                gdb.write(".")
+                gdb.flush(gdb.STDOUT)
+
+                sleep(self._period)
+        except KeyboardInterrupt:
+            pass
 
         print("")
         for _, thread in sorted(threads.items()):
