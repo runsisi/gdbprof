@@ -183,6 +183,8 @@ DURATION is the sampling duration, the default duration is %ds.
                 print("Sample duration must be an integer. Try \"help profile\".")
                 return
 
+        gdb.execute("set pagination off")
+
         def breaking_continue_handler(event):
             sleep(self._period)
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
