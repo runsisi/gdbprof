@@ -26,6 +26,7 @@ import signal
 
 SAMPLE_FREQUENCY = 10
 SAMPLE_DURATION = 180
+SAMPLE_THRESHOLD = 0.5
 
 
 class GDBThread:
@@ -84,7 +85,7 @@ class GDBFunction:
         for func in self.subfuncs:
             func.calc_percent(total)
 
-    def print_percent(self, prefix, total):
+    def print_percent(self, prefix, total, threshold):
         self.calc_percent(total)
         
         i = 0
@@ -98,19 +99,20 @@ class GDBFunction:
             print("%s%s%0.2f%% %s" % (prefix, "+ ", func.percent, func.name if func.name is not None else "???"))
 
             # Don't descend for very small values
-            if func.percent < 0.1:
+            if func.percent < threshold:
                 continue
 
-            func.print_percent(prefix + new_prefix, total)
+            func.print_percent(prefix + new_prefix, total, threshold)
             i += 1
 
 
 class ProfileCommandImpl(gdb.Command):
     """Profile an application against wall clock time.
 
-profile FREQUENCY DURATION
+profile FREQUENCY DURATION THRESHOLD
 FREQUENCY is the sampling frequency, the default frequency is %dhz.
 DURATION is the sampling duration, the default duration is %ds.
+THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
     """
 
     def __init__(self):
@@ -118,6 +120,7 @@ DURATION is the sampling duration, the default duration is %ds.
                                                  prefix=False)
         self.frequency = SAMPLE_FREQUENCY
         self.duration = SAMPLE_DURATION
+        self.threshold = SAMPLE_THRESHOLD
         self._period = 1.0 / self.frequency
         self._samples = self.frequency * self.duration
 
@@ -129,6 +132,8 @@ DURATION is the sampling duration, the default duration is %ds.
             return [str(self.frequency)]
         elif len(text.split()) < 2:
             return [str(self.duration)]
+        elif len(text.split()) < 3:
+            return [str(self.threshold)]
         return gdb.COMPLETE_NONE
 
     def invoke(self, argument, from_tty):
@@ -136,23 +141,29 @@ DURATION is the sampling duration, the default duration is %ds.
 
         argv = gdb.string_to_argv(argument)
 
-        if len(argv) > 2:
+        if len(argv) > 3:
             print("Extraneous argument. Try \"help profile\"")
             return
 
         if len(argv) > 0:
             try:
-                self.frequency = int(argv[0])
+                self.frequency = float(argv[0])
                 self._period = 1.0 / self.frequency
             except ValueError:
                 print("Sample frequency must be an integer. Try \"help profile\".")
                 return
         if len(argv) > 1:
             try:
-                self.duration = int(argv[1])
-                self._samples = self.frequency * self.duration
+                self.duration = float(argv[1])
+                self._samples = int(self.frequency * self.duration)
             except ValueError:
                 print("Sample duration must be an integer. Try \"help profile\".")
+                return
+        if len(argv) > 2:
+            try:
+                self.threshold = float(argv[2])
+            except ValueError:
+                print("Sample threshold must be a float point number. Try \"help profile\".")
                 return
 
         gdb.execute("set pagination off", to_string=True)
@@ -189,7 +200,7 @@ DURATION is the sampling duration, the default duration is %ds.
             print("")
             print("Thread: %d (%s) - %d samples " % (thread.num, thread.name, thread.func.get_samples()))
             print("")
-            thread.func.print_percent("", thread.func.get_samples())
+            thread.func.print_percent("", thread.func.get_samples(), self.threshold)
 
         pid = gdb.selected_inferior().pid
         os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until it's reattached
@@ -200,7 +211,7 @@ DURATION is the sampling duration, the default duration is %ds.
 
 
 class ProfileCommand(ProfileCommandImpl):
-    __doc__ = ProfileCommandImpl.__doc__ % (SAMPLE_FREQUENCY, SAMPLE_DURATION)
+    __doc__ = ProfileCommandImpl.__doc__ % (SAMPLE_FREQUENCY, SAMPLE_DURATION, SAMPLE_THRESHOLD)
 
 
 ProfileCommand()
