@@ -24,8 +24,8 @@ from time import sleep
 import os
 import signal
 
-SAMPLE_FREQUENCY = 10
-SAMPLE_DURATION = 180
+SAMPLE_FREQUENCY = 10.0
+SAMPLE_DURATION = 180.0
 SAMPLE_THRESHOLD = 0.5
 
 
@@ -55,7 +55,7 @@ class GDBFunction:
         return count
 
     def get_percent(self, total):
-        return 100.0 * self.get_samples() / total
+        return 100.0 * self.get_samples() / max(1, total)
 
     def get_func(self, name):
         # ignore myself deliberately
@@ -155,7 +155,7 @@ THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
         if len(argv) > 1:
             try:
                 self.duration = float(argv[1])
-                self._samples = int(self.frequency * self.duration)
+                self._samples = max(1, int(self.frequency * self.duration))
             except ValueError:
                 print("Sample duration must be an integer. Try \"help profile\".")
                 return
@@ -173,12 +173,13 @@ THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
 
         threads = {}
-        for i in range(0, self._samples):
-            gdb.events.cont.connect(breaking_continue_handler)
-            gdb.execute("continue", to_string=True)
-            gdb.events.cont.disconnect(breaking_continue_handler)
+        try:
+            for i in range(0, self._samples):
+                gdb.events.cont.connect(breaking_continue_handler)
+                gdb.execute("continue", to_string=True)
+                gdb.events.cont.disconnect(breaking_continue_handler)
 
-            for inf in gdb.inferiors():
+                inf = gdb.selected_inferior()
                 for th in inf.threads():
                     th.switch()
 
@@ -192,8 +193,13 @@ THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
 
                     threads[th.num].func.add_frame(frame)
 
-            gdb.write(".")
+                gdb.write(".")
+                gdb.flush(gdb.STDOUT)
+        except gdb.error as e:
+            gdb.write(e.message)
             gdb.flush(gdb.STDOUT)
+        except KeyboardInterrupt:
+            pass
 
         print("")
         for _, thread in sorted(threads.items()):
@@ -202,12 +208,14 @@ THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
             print("")
             thread.func.print_percent("", thread.func.get_samples(), self.threshold)
 
-        pid = gdb.selected_inferior().pid
-        os.kill(pid, signal.SIGSTOP)  # Make sure the process does nothing until it's reattached
-        gdb.execute("detach", to_string=True)
-        gdb.execute("attach %d" % pid, to_string=True)
-        os.kill(pid, signal.SIGCONT)
-        gdb.execute("continue", to_string=True)
+        inf = gdb.selected_inferior()
+        if len(inf.threads()) != 0:     # Inferior.is_valid() always return True
+            # pid = inf.pid
+            # os.kill(pid, signal.SIGSTOP)    # Make sure the process does nothing until it's reattached
+            # gdb.execute("detach", to_string=True)
+            # gdb.execute("attach %d" % pid, to_string=True)
+            # os.kill(pid, signal.SIGCONT)
+            gdb.execute("continue", to_string=True)
 
 
 class ProfileCommand(ProfileCommandImpl):
