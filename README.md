@@ -26,19 +26,35 @@ Example
 -------
 ```
 (gdb) source gdbprof.py
-(gdb) profile begin
-..................................................^C
-Profiling complete with 50 samples.
-27      poll->None->None->xcb_wait_for_reply->_XReply->None->None->intel_update_renderbuffers->intel_prepare_render->None->None->None->None->None->None->None->None->None->None->None->None->__libc_start_main->None->None->None
-10      nanosleep->usleep->None->None->None->None->__libc_start_main->None->None->None
-4       poll->None->None->xcb_wait_for_reply->_XReply->None->None->intel_update_renderbuffers->intel_prepare_render->None->None->None->None->__libc_start_main->None->None->None
-2       poll->None->None->xcb_wait_for_reply->_XReply->None->None->intel_update_renderbuffers->intel_prepare_render->None->None->None->None->None->None->None->None->None->None->None->None->None->None->__libc_start_main->None->None->None
-1       gettimeofday->SDL_GetTicks->None->SDL_PumpEvents->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->__libc_start_main->None->None->None
-1       recv->None->None->None->None->_XEventsQueued->XFlush->None->None->SDL_PumpEvents->SDL_PollEvent->None->None->__libc_start_main->None->None->None
-1       poll->None->None->xcb_wait_for_reply->_XReply->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->__libc_start_main->None->None->None
-1       ioctl->drmIoctl->None->_intel_batchbuffer_flush->intelFinish->None->None->None->None->None->None->__libc_start_main->None->None->None
-1       poll->None->None->xcb_wait_for_reply->_XReply->None->None->intel_update_renderbuffers->intel_prepare_render->None->None->None->None->None->None->__libc_start_main->None->None->None
-1       None->brw_upload_state->brw_draw_prims->vbo_exec_vtx_flush->None->vbo_exec_FlushVertices->_mesa_PolygonOffset->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->__libc_start_main->None->None->None
-1       glDisable->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->None->__libc_start_main->None->None->None
-(gdb)
+(gdb) help profile
+Profile an application against wall clock time.
+
+profile FREQUENCY DURATION THRESHOLD
+FREQUENCY is the sampling frequency, the default frequency is 10hz.
+DURATION is the sampling duration, the default duration is 180s.
+THRESHOLD is the sampling filter threshold, the default threshold is %0.50.
+
+(gdb) profile 10 5 0.5
+..................................................
+
+Thread: 1 (ceph-osd) - 50 samples
+
++ 100.00% main
+  + 100.00% AsyncMessenger::wait
+    + 100.00% Cond::Wait
+      + 100.00% pthread_cond_wait@@GLIBC_2.3.2
+
+Thread: 2 (log) - 50 samples
+
++ 100.00% clone
+  + 100.00% start_thread
+    + 100.00% Thread::_entry_func
+      + 100.00% Thread::entry_wrapper
+        + 100.00% ceph::logging::Log::entry
+          + 96.00% pthread_cond_wait@@GLIBC_2.3.2
+          | + 6.00% __pthread_mutex_cond_lock
+          |   + 6.00% __lll_lock_wait
+          + 4.00% __GI___pthread_mutex_unlock
+            + 4.00% __pthread_mutex_unlock_usercnt
+              + 4.00% __lll_unlock_wake
 ```
