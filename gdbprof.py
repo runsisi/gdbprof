@@ -20,9 +20,10 @@
 # SOFTWARE.
 
 import gdb
-from time import sleep
 import os
 import signal
+import threading
+import time
 
 SAMPLE_FREQUENCY = 10.0
 SAMPLE_DURATION = 180.0
@@ -168,8 +169,16 @@ THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
 
         gdb.execute("set pagination off", to_string=True)
 
+        quit_event = threading.Event()
+
         def breaking_continue_handler(event):
-            sleep(self._period)
+            def sig_quit_handler(signum, frame):
+                quit_event.set()
+
+            sig_default_handler = signal.signal(signal.SIGINT, sig_quit_handler)
+            if not quit_event.is_set():
+                time.sleep(self._period)
+            signal.signal(signal.SIGINT, sig_default_handler)
             os.kill(gdb.selected_inferior().pid, signal.SIGINT)
 
         threads = {}
@@ -178,6 +187,9 @@ THRESHOLD is the sampling filter threshold, the default threshold is %%%0.2f.
                 gdb.events.cont.connect(breaking_continue_handler)
                 gdb.execute("continue", to_string=True)
                 gdb.events.cont.disconnect(breaking_continue_handler)
+
+                if quit_event.is_set():
+                    break
 
                 inf = gdb.selected_inferior()
                 for th in inf.threads():
