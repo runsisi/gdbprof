@@ -36,8 +36,7 @@ class GDBThread:
 
 
 class GDBFunction:
-    def __init__(self, pc, name):
-        self.pc = pc
+    def __init__(self, name):
         self.name = name
         self.subfuncs = []
 
@@ -57,21 +56,19 @@ class GDBFunction:
     def get_percent(self, total):
         return 100.0 * self.get_samples() / total
 
-    def get_func(self, pc):
+    def get_func(self, name):
+        # ignore myself deliberately
         for func in self.subfuncs:
-            if func.pc == pc:
+            if func.name == name:
                 return func
         return None
 
-    def get_or_add_func(self, pc, name):
-        func = self.get_func(pc)
+    def get_or_add_func(self, name):
+        func = self.get_func(name)
         if func is not None:
             return func
 
-        if name is None:
-            name = "???"
-
-        func = GDBFunction(pc, name)
+        func = GDBFunction(name)
         self.subfuncs.append(func)
         return func
 
@@ -79,7 +76,7 @@ class GDBFunction:
         if frame is None:
             self.count += 1
         else:
-            func = self.get_or_add_func(frame.pc(), frame.name())
+            func = self.get_or_add_func(frame.name())
             func.add_frame(frame.newer())
 
     def calc_percent(self, total):
@@ -98,7 +95,7 @@ class GDBFunction:
             else:
                 new_prefix += '| '
 
-            print("%s%s%0.2f%% %s" % (prefix, "+ ", func.percent, func.name))
+            print("%s%s%0.2f%% %s" % (prefix, "+ ", func.percent, func.name if func.name is not None else "???"))
 
             # Don't descend for very small values
             if func.percent < 0.1:
@@ -175,7 +172,7 @@ DURATION is the sampling duration, the default duration is %ds.
                     th.switch()
 
                     if th.num not in threads:
-                        func = GDBFunction(None, None)
+                        func = GDBFunction(None)
                         threads[th.num] = GDBThread(th.num, th.name, func)
 
                     frame = gdb.newest_frame()
