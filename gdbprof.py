@@ -108,7 +108,7 @@ class GDBFunction:
             i += 1
 
 
-class ProfileCommand(gdb.Command):
+class ProfileCommandImpl(gdb.Command):
     """Profile an application against wall clock time.
 
 profile FREQUENCY DURATION
@@ -117,8 +117,8 @@ DURATION is the sampling duration, the default duration is %ds.
     """
 
     def __init__(self):
-        super(ProfileCommand, self).__init__("profile", gdb.COMMAND_RUNNING,
-                                             prefix=False)
+        super(ProfileCommandImpl, self).__init__("profile", gdb.COMMAND_RUNNING,
+                                                 prefix=False)
         self.frequency = SAMPLE_FREQUENCY
         self.duration = SAMPLE_DURATION
         self._period = 1.0 / self.frequency
@@ -202,5 +202,8 @@ DURATION is the sampling duration, the default duration is %ds.
         gdb.execute("continue", to_string=True)
 
 
-ProfileCommand.__doc__ %= (SAMPLE_FREQUENCY, SAMPLE_DURATION)
+class ProfileCommand(ProfileCommandImpl):
+    __doc__ = ProfileCommandImpl.__doc__ % (SAMPLE_FREQUENCY, SAMPLE_DURATION)
+
+
 ProfileCommand()
